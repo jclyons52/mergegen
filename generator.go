@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 )
@@ -112,6 +113,10 @@ func main() {
 		fmt.Println("Failed to parse template:", err)
 		return
 	}
+
+	// Determine the directory of the source file to place the output in the same directory
+	outputDir := filepath.Dir(*srcFile)
+	*output = filepath.Join(outputDir, *output)
 
 	outputFile, err := os.Create(*output)
 	if err != nil {
