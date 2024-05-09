@@ -17,7 +17,7 @@ var (
 	output   = flag.String("output", "merge_functions.go", "Output file for the generated merge functions.")
 )
 
-const funcTemplate = `package main
+const funcTemplate = `package {{ .PackageName }}
 
 // generated code, do not modify
 
@@ -40,6 +40,13 @@ func Merge{{ .TypeName }}(dst, src *{{ .TypeName }}) {
 {{ end }}
 `
 
+type field struct {
+	Name        string
+	Type        string
+	TypeElement string
+	IsStruct    bool
+}
+
 func main() {
 	flag.Parse()
 
@@ -55,12 +62,9 @@ func main() {
 		return
 	}
 
-	structs := make(map[string][]struct {
-		Name        string
-		Type        string
-		TypeElement string
-		IsStruct    bool
-	})
+	packageName := node.Name.Name // Get the package name from the AST
+
+	structs := make(map[string][]field)
 	structNames := make([]string, 0)
 
 	// Collect all struct types
@@ -70,21 +74,11 @@ func main() {
 			if st, ok := x.Type.(*ast.StructType); ok {
 				typeName := x.Name.Name
 				structNames = append(structNames, typeName)
-				var fields []struct {
-					Name        string
-					Type        string
-					TypeElement string
-					IsStruct    bool
-				}
+				var fields []field
 				for _, f := range st.Fields.List {
 					for _, name := range f.Names {
 						fieldType, typeElement, isStruct := getTypeName(f.Type)
-						fields = append(fields, struct {
-							Name        string
-							Type        string
-							TypeElement string
-							IsStruct    bool
-						}{
+						fields = append(fields, field{
 							Name:        name.Name,
 							Type:        fieldType,
 							TypeElement: typeElement,
@@ -126,34 +120,27 @@ func main() {
 	}
 	defer outputFile.Close()
 
-	data := []struct {
-		TypeName string
-		Fields   []struct {
-			Name        string
-			Type        string
-			TypeElement string
-			IsStruct    bool
+	data := struct {
+		PackageName string
+		Structs     []struct {
+			TypeName string
+			Fields   []field
 		}
-	}{}
+	}{
+		PackageName: packageName,
+	}
 
 	for _, name := range structNames {
-		data = append(data, struct {
+		data.Structs = append(data.Structs, struct {
 			TypeName string
-			Fields   []struct {
-				Name        string
-				Type        string
-				TypeElement string
-				IsStruct    bool
-			}
+			Fields   []field
 		}{
 			TypeName: name,
 			Fields:   structs[name],
 		})
 	}
 
-	if err := t.Execute(outputFile, map[string]interface{}{
-		"Structs": data,
-	}); err != nil {
+	if err := t.Execute(outputFile, data); err != nil {
 		fmt.Println("Error executing template:", err)
 	}
 }
