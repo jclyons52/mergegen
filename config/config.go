@@ -1,4 +1,4 @@
-package main
+package config
 
 //go:generate ./generator -src=./config.go -type=Config -output=config_merge.go
 
@@ -7,9 +7,15 @@ type Features struct {
 	MaxRetries    int
 }
 
+type Client struct {
+	Host string
+	Port int
+}
+
 type Config struct {
 	APIKey   string
 	Timeout  int
 	Features *Features
+	Client   Client
 	Bar      string
 }
