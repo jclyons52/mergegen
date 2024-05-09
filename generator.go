@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -27,14 +26,20 @@ const funcTemplate = `package {{ .PackageName }}
 func Merge{{ .TypeName }}(dst, src *{{ .TypeName }}) {
 {{- range .Fields }}
     {{- if .IsStruct }}
-    if dst.{{ .Name }} == nil {
-        dst.{{ .Name }} = new({{ .TypeElement }})
-    }
-    Merge{{ .TypeElement }}(dst.{{ .Name }}, src.{{ .Name }})
+        {{- if .IsPointer }}
+			if src.{{ .Name }} != nil {
+				if dst.{{ .Name }} == nil {
+					dst.{{ .Name }} = new({{ .TypeElement }})
+				}
+				Merge{{ .TypeElement }}(dst.{{ .Name }}, src.{{ .Name }})
+			}
+        {{- else }}
+    		Merge{{ .TypeElement }}(&dst.{{ .Name }}, &src.{{ .Name }})
+        {{- end }}
     {{- else }}
-    if src.{{ .Name }} != {{ defaultZeroValue .Type }} {
-        dst.{{ .Name }} = src.{{ .Name }}
-    }
+		if src.{{ .Name }} != {{ defaultZeroValue .Type }} {
+			dst.{{ .Name }} = src.{{ .Name }}
+		}
     {{- end }}
 {{- end }}
 }
@@ -46,6 +51,17 @@ type field struct {
 	Type        string
 	TypeElement string
 	IsStruct    bool
+	IsPointer   bool
+}
+
+type templateData struct {
+	PackageName string
+	Structs     []structData
+}
+
+type structData struct {
+	TypeName string
+	Fields   []field
 }
 
 func main() {
@@ -63,36 +79,35 @@ func main() {
 		return
 	}
 
-	packageName := node.Name.Name // Get the package name from the AST
+	t, err := parseTemplate()
+	if err != nil {
+		fmt.Println("Failed to parse template:", err)
+		return
+	}
 
-	structs := make(map[string][]field)
-	structNames := make([]string, 0)
+	outputFile, err := generateOutputFile(*srcFile, *output)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+	defer outputFile.Close()
 
-	// Collect all struct types
-	ast.Inspect(node, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.TypeSpec:
-			if st, ok := x.Type.(*ast.StructType); ok {
-				typeName := x.Name.Name
-				structNames = append(structNames, typeName)
-				var fields []field
-				for _, f := range st.Fields.List {
-					for _, name := range f.Names {
-						fieldType, typeElement, isStruct := getTypeName(f.Type)
-						fields = append(fields, field{
-							Name:        name.Name,
-							Type:        fieldType,
-							TypeElement: typeElement,
-							IsStruct:    isStruct,
-						})
-					}
-				}
-				structs[typeName] = fields
-			}
-		}
-		return true
-	})
+	data := TransformAstToTemplateData(node)
 
+	if err := t.Execute(outputFile, data); err != nil {
+		fmt.Println("Error executing template:", err)
+	}
+}
+
+func generateOutputFile(src string, out string) (*os.File, error) {
+	// Determine the directory of the source file to place the output in the same directory
+	outputDir := filepath.Dir(src)
+	output := filepath.Join(outputDir, out)
+	outputFile, err := os.Create(output)
+	return outputFile, err
+}
+
+func parseTemplate() (*template.Template, error) {
 	funcMap := template.FuncMap{
 		"defaultZeroValue": func(typeStr string) string {
 			if strings.Contains(typeStr, "int") || strings.Contains(typeStr, "float") {
@@ -108,62 +123,5 @@ func main() {
 		},
 	}
 
-	t, err := template.New("func").Funcs(funcMap).Parse(funcTemplate)
-	if err != nil {
-		fmt.Println("Failed to parse template:", err)
-		return
-	}
-
-	// Determine the directory of the source file to place the output in the same directory
-	outputDir := filepath.Dir(*srcFile)
-	*output = filepath.Join(outputDir, *output)
-
-	outputFile, err := os.Create(*output)
-	if err != nil {
-		fmt.Println("Error creating file:", err)
-		return
-	}
-	defer outputFile.Close()
-
-	data := struct {
-		PackageName string
-		Structs     []struct {
-			TypeName string
-			Fields   []field
-		}
-	}{
-		PackageName: packageName,
-	}
-
-	for _, name := range structNames {
-		data.Structs = append(data.Structs, struct {
-			TypeName string
-			Fields   []field
-		}{
-			TypeName: name,
-			Fields:   structs[name],
-		})
-	}
-
-	if err := t.Execute(outputFile, data); err != nil {
-		fmt.Println("Error executing template:", err)
-	}
-}
-
-func getTypeName(expr ast.Expr) (string, string, bool) {
-	switch x := expr.(type) {
-	case *ast.Ident:
-		return x.Name, x.Name, false
-	case *ast.SelectorExpr:
-		typeName, _, _ := getTypeName(x.X)
-		return typeName + "." + x.Sel.Name, x.Sel.Name, true
-	case *ast.StarExpr:
-		_, element, _ := getTypeName(x.X)
-		return "*" + element, element, true
-	case *ast.ArrayType:
-		_, element, isStruct := getTypeName(x.Elt)
-		return "[]" + element, element, isStruct
-	default:
-		return "", "", false
-	}
+	return template.New("func").Funcs(funcMap).Parse(funcTemplate)
 }
