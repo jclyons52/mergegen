@@ -5,6 +5,8 @@ import (
 	"go/parser"
 	"go/token"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // helper function to parse source to *ast.File
@@ -24,51 +26,38 @@ func TestTransformAstToTemplateData(t *testing.T) {
 			EnableLogging bool
 			MaxRetries    int
 		}
-		
+
 		type Client struct {
 			Host string
 			Port int
 		}
-		
+
 		type Config struct {
 			APIKey   string
-			Timeout  int
+			Timeout  *int
 			Features *Features
 			Client   Client
-			Bar      string
+			values   []int
 		}
 	`
 
 	node := parseSource(src)
-
 	result := TransformAstToTemplateData(node)
 
-	if result.PackageName != "test" {
-		t.Errorf("Expected test, got %s", result.PackageName)
-	}
+	assert.Equal(t, "test", result.PackageName, "PackageName should match 'test'")
+
 	for _, structData := range result.Structs {
 		if structData.TypeName == "Config" {
-			apiKey := structData.Fields[0]
-			if apiKey.IsPointer != false {
-				t.Errorf("Expected false, got %t", apiKey.IsPointer)
-			}
-			if apiKey.IsStruct != false {
-				t.Errorf("Expected false, got %t", apiKey.IsStruct)
-			}
-			features := structData.Fields[2]
-			if features.IsPointer != true {
-				t.Errorf("Expected true, got %t", features.IsPointer)
-			}
-			if features.IsStruct != true {
-				t.Errorf("Expected true, got %t", features.IsStruct)
-			}
-			client := structData.Fields[3]
-			if client.IsPointer != false {
-				t.Errorf("Expected false, got %t", client.IsPointer)
-			}
-			if client.IsStruct != true {
-				t.Errorf("Expected true, got %t", client.IsStruct)
-			}
+			assert.False(t, structData.Fields[0].IsPointer, "APIKey should not be a pointer")
+			assert.False(t, structData.Fields[0].IsStruct, "APIKey should not be a struct")
+			assert.True(t, structData.Fields[1].IsPointer, "Timeout should be a pointer")
+			assert.False(t, structData.Fields[1].IsStruct, "Timeout should not be a struct")
+			assert.True(t, structData.Fields[2].IsPointer, "Features should be a pointer")
+			assert.True(t, structData.Fields[2].IsStruct, "Features should be a struct")
+			assert.False(t, structData.Fields[3].IsPointer, "Client should not be a pointer")
+			assert.True(t, structData.Fields[3].IsStruct, "Client should be a struct")
+			assert.False(t, structData.Fields[4].IsPointer, "values should not be a pointer")
+			assert.False(t, structData.Fields[4].IsStruct, "values should not be a struct")
 		}
 	}
 }
