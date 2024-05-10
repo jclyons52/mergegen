@@ -30,13 +30,13 @@ func MergeConfig(dst, src *Config) {
 	if src.Timeout != 0 {
 		dst.Timeout = src.Timeout
 	}
-	if dst.Features == nil {
-		dst.Features = new(Features)
+	if src.Features != nil {
+		if dst.Features == nil {
+			dst.Features = new(Features)
+		}
+		MergeFeatures(dst.Features, src.Features)
 	}
-	MergeFeatures(dst.Features, src.Features)
-	if src.Client != nil {
-		dst.Client = src.Client
-	}
+	MergeClient(&dst.Client, &src.Client)
 	if src.Bar != "" {
 		dst.Bar = src.Bar
 	}

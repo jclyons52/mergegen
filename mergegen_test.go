@@ -48,12 +48,26 @@ func TestTransformAstToTemplateData(t *testing.T) {
 	}
 	for _, structData := range result.Structs {
 		if structData.TypeName == "Config" {
+			apiKey := structData.Fields[0]
+			if apiKey.IsPointer != false {
+				t.Errorf("Expected false, got %t", apiKey.IsPointer)
+			}
+			if apiKey.IsStruct != false {
+				t.Errorf("Expected false, got %t", apiKey.IsStruct)
+			}
 			features := structData.Fields[2]
 			if features.IsPointer != true {
 				t.Errorf("Expected true, got %t", features.IsPointer)
 			}
 			if features.IsStruct != true {
 				t.Errorf("Expected true, got %t", features.IsStruct)
+			}
+			client := structData.Fields[3]
+			if client.IsPointer != false {
+				t.Errorf("Expected false, got %t", client.IsPointer)
+			}
+			if client.IsStruct != true {
+				t.Errorf("Expected true, got %t", client.IsStruct)
 			}
 		}
 	}

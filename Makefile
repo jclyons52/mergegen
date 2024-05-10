@@ -1,3 +1,6 @@
 build:
-	go build generator.go
-	./generator -src=./config/config.go -type=Config -output=config_merge.go 
+	go build .
+run:
+	go run . -src=./config/config.go -type=Config -output=config_merge.go
+test:
+	go test -v -cover ./...

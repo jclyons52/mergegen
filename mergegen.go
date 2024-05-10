@@ -57,7 +57,7 @@ func collectStructs(node *ast.File) (map[string][]field, []string) {
 func getTypeName(expr ast.Expr) (string, string, bool, bool) {
 	switch x := expr.(type) {
 	case *ast.Ident:
-		return x.Name, x.Name, false, false // Non-pointer, non-struct types
+		return x.Name, x.Name, !isBasicType(x.Name), false
 	case *ast.SelectorExpr:
 		typeName, _, isStruct, isPointer := getTypeName(x.X)
 		return typeName + "." + x.Sel.Name, x.Sel.Name, isStruct, isPointer // Preserve struct and pointer flags
@@ -69,5 +69,14 @@ func getTypeName(expr ast.Expr) (string, string, bool, bool) {
 		return "[]" + element, element, isStruct, isPointer // Arrays might be of pointer types
 	default:
 		return "", "", false, false
+	}
+}
+
+func isBasicType(name string) bool {
+	switch name {
+	case "string", "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "uintptr", "byte", "rune", "float32", "float64", "complex64", "complex128", "bool", "error":
+		return true
+	default:
+		return false
 	}
 }
