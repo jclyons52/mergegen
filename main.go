@@ -19,15 +19,38 @@ var (
 
 const funcTemplate = `package {{ .PackageName }}
 
+{{- if .Imports }}
 import (
-    "github.com/imdario/mergo"
+{{- range .Imports }}
+    "{{ . }}"
 )
+{{- end }}
+{{- end }}
 
 // generated code, do not modify
 
+type Merger struct {
+{{- range externalTypes .Structs }}
+    Merge{{ .Name }} func(dst, src *{{ .Type }}) error
+{{- end }}
+}
+
+// NewMerger creates a new Merger with optional custom merge functions for external types.
+func NewMerger(
+	{{- range externalTypes .Structs }}
+	merge{{ .Name }} func(dst, src *{{ .Type }}) error
+	{{- end }}
+) *Merger {
+    return &Merger{
+		{{- range externalTypes .Structs }}
+		Merge{{ .Name }}: merge{{ .Name }},
+		{{- end }}
+	}
+}
+
 {{ range .Structs }}
 // Merge{{ .TypeName }} merges two {{ .TypeName }} structs.
-func Merge{{ .TypeName }}(dst, src *{{ .TypeName }}) error {
+func (m *Merger) Merge{{ .TypeName }}(dst, src *{{ .TypeName }}) error {
 {{- range .Fields }}
     {{- if .IsStruct }}
         {{- if .IsPointer }}
@@ -35,18 +58,18 @@ func Merge{{ .TypeName }}(dst, src *{{ .TypeName }}) error {
 				if dst.{{ .Name }} == nil {
 					dst.{{ .Name }} = new({{ .TypeElement }})
 				}
-				if err := Merge{{ .TypeElement }}(dst.{{ .Name }}, src.{{ .Name }}); err != nil {
+				if err := m.Merge{{ .TypeElement }}(dst.{{ .Name }}, src.{{ .Name }}); err != nil {
 					return err
 				}
 			}
         {{- else }}
-			if err := Merge{{ .TypeElement }}(&dst.{{ .Name }}, &src.{{ .Name }}); err != nil {
+			if err := m.Merge{{ .TypeElement }}(&dst.{{ .Name }}, &src.{{ .Name }}); err != nil {
 				return err
 			}
         {{- end }}
     {{- else }}
-        {{- if .NeedsMergo }}
-            if err := mergo.Merge(&dst.{{ .Name }}, src.{{ .Name }}, mergo.WithOverride); err != nil {
+        {{- if .IsExternal }}
+            if err := m.Merge{{ .Name }}(&dst.{{ .Name }}, &src.{{ .Name }}); err != nil {
 				return err
 			}
         {{- else }}
@@ -59,6 +82,7 @@ func Merge{{ .TypeName }}(dst, src *{{ .TypeName }}) error {
     return nil
 }
 {{ end }}
+
 `
 
 type field struct {
@@ -67,11 +91,12 @@ type field struct {
 	TypeElement string
 	IsStruct    bool
 	IsPointer   bool
-	NeedsMergo  bool
+	IsExternal  bool
 }
 
 type templateData struct {
 	PackageName string
+	Imports     []string
 	Structs     []structData
 }
 
@@ -125,6 +150,17 @@ func generateOutputFile(src string, out string) (*os.File, error) {
 
 func parseTemplate() (*template.Template, error) {
 	funcMap := template.FuncMap{
+		"externalTypes": func(structs []structData) []field {
+			var externalTypes []field
+			for _, s := range structs {
+				for _, field := range s.Fields {
+					if field.IsExternal {
+						externalTypes = append(externalTypes, field)
+					}
+				}
+			}
+			return externalTypes
+		},
 		"defaultZeroValue": func(typeStr string) string {
 			if strings.Contains(typeStr, "int") || strings.Contains(typeStr, "float") {
 				return "0"

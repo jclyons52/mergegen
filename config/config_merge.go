@@ -1,13 +1,26 @@
 package config
 
 import (
-	"github.com/imdario/mergo"
+	"time"
 )
 
 // generated code, do not modify
 
+type Merger struct {
+	MergeCreatedAt func(dst, src *time.Time) error
+}
+
+// NewMerger creates a new Merger with optional custom merge functions for external types.
+func NewMerger(
+	mergeCreatedAt func(dst, src *time.Time) error,
+) *Merger {
+	return &Merger{
+		MergeCreatedAt: mergeCreatedAt,
+	}
+}
+
 // MergeFeatures merges two Features structs.
-func MergeFeatures(dst, src *Features) error {
+func (m *Merger) MergeFeatures(dst, src *Features) error {
 	if src.EnableLogging != false {
 		dst.EnableLogging = src.EnableLogging
 	}
@@ -18,7 +31,7 @@ func MergeFeatures(dst, src *Features) error {
 }
 
 // MergeClient merges two Client structs.
-func MergeClient(dst, src *Client) error {
+func (m *Merger) MergeClient(dst, src *Client) error {
 	if src.Host != "" {
 		dst.Host = src.Host
 	}
@@ -29,7 +42,7 @@ func MergeClient(dst, src *Client) error {
 }
 
 // MergeConfig merges two Config structs.
-func MergeConfig(dst, src *Config) error {
+func (m *Merger) MergeConfig(dst, src *Config) error {
 	if src.APIKey != "" {
 		dst.APIKey = src.APIKey
 	}
@@ -40,17 +53,17 @@ func MergeConfig(dst, src *Config) error {
 		if dst.Features == nil {
 			dst.Features = new(Features)
 		}
-		if err := MergeFeatures(dst.Features, src.Features); err != nil {
+		if err := m.MergeFeatures(dst.Features, src.Features); err != nil {
 			return err
 		}
 	}
-	if err := MergeClient(&dst.Client, &src.Client); err != nil {
+	if err := m.MergeClient(&dst.Client, &src.Client); err != nil {
 		return err
 	}
 	if src.Bar != "" {
 		dst.Bar = src.Bar
 	}
-	if err := mergo.Merge(&dst.CreatedAt, src.CreatedAt, mergo.WithOverride); err != nil {
+	if err := m.MergeCreatedAt(&dst.CreatedAt, &src.CreatedAt); err != nil {
 		return err
 	}
 	return nil

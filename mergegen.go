@@ -6,13 +6,10 @@ import (
 )
 
 func TransformAstToTemplateData(node *ast.File) templateData {
-	structs, structNames := collectStructs(node)
-	return formatTemplateData(node.Name.Name, structs, structNames)
-}
-
-func formatTemplateData(packageName string, structs map[string][]field, structNames []string) templateData {
+	structs, structNames, imports := collectStructs(node)
 	data := templateData{
-		PackageName: packageName,
+		PackageName: node.Name.Name,
+		Imports:     imports,
 	}
 
 	for _, name := range structNames {
@@ -25,9 +22,10 @@ func formatTemplateData(packageName string, structs map[string][]field, structNa
 	return data
 }
 
-func collectStructs(node *ast.File) (map[string][]field, []string) {
+func collectStructs(node *ast.File) (map[string][]field, []string, []string) {
 	var structs = make(map[string][]field, 0)
 	var structNames []string
+	var imports []string
 	// Collect all struct types
 	ast.Inspect(node, func(n ast.Node) bool {
 		switch x := n.(type) {
@@ -38,15 +36,18 @@ func collectStructs(node *ast.File) (map[string][]field, []string) {
 				var fields []field
 				for _, f := range st.Fields.List {
 					for _, name := range f.Names {
-						fieldType, typeElement, isStruct, isPointer := getTypeName(f.Type)
+						fieldType, typeElement, isStruct, isPointer, pkg := getTypeName(f.Type)
 						fields = append(fields, field{
 							Name:        name.Name,
 							Type:        fieldType,
 							TypeElement: typeElement,
 							IsStruct:    isStruct,
 							IsPointer:   isPointer,
-							NeedsMergo:  isExternalType(fieldType),
+							IsExternal:  isExternalType(fieldType),
 						})
+						if isExternalType(fieldType) {
+							imports = append(imports, pkg)
+						}
 					}
 				}
 				structs[typeName] = fields
@@ -55,29 +56,29 @@ func collectStructs(node *ast.File) (map[string][]field, []string) {
 		return true
 	})
 
-	return structs, structNames
+	return structs, structNames, imports
 }
 
-func getTypeName(expr ast.Expr) (string, string, bool, bool) {
+func getTypeName(expr ast.Expr) (string, string, bool, bool, string) {
 	switch x := expr.(type) {
 	case *ast.Ident:
-		return x.Name, x.Name, !isBasicType(x.Name), false
+		return x.Name, x.Name, !isBasicType(x.Name), false, ""
 	case *ast.SelectorExpr:
 		// Fully qualified name for external types
 		pkgIdent, ok := x.X.(*ast.Ident)
 		if ok {
-			return pkgIdent.Name + "." + x.Sel.Name, x.Sel.Name, false, false
+			return pkgIdent.Name + "." + x.Sel.Name, x.Sel.Name, false, false, pkgIdent.Name
 		}
-		typeName, _, isStruct, isPointer := getTypeName(x.X)
-		return typeName + "." + x.Sel.Name, x.Sel.Name, isStruct, isPointer // Preserve struct and pointer flags
+		typeName, _, isStruct, isPointer, pkg := getTypeName(x.X)
+		return typeName + "." + x.Sel.Name, x.Sel.Name, isStruct, isPointer, pkg // Preserve struct and pointer flags
 	case *ast.StarExpr:
-		_, element, isStruct, _ := getTypeName(x.X)
-		return "*" + element, element, isStruct, true // Mark as pointer
+		_, element, isStruct, _, _ := getTypeName(x.X)
+		return "*" + element, element, isStruct, true, "" // Mark as pointer
 	case *ast.ArrayType:
-		_, element, isStruct, isPointer := getTypeName(x.Elt)
-		return "[]" + element, element, isStruct, isPointer // Arrays might be of pointer types
+		_, element, isStruct, isPointer, _ := getTypeName(x.Elt)
+		return "[]" + element, element, isStruct, isPointer, "" // Arrays might be of pointer types
 	default:
-		return "", "", false, false
+		return "", "", false, false, ""
 	}
 }
 
