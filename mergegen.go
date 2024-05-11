@@ -1,6 +1,9 @@
 package main
 
-import "go/ast"
+import (
+	"go/ast"
+	"strings"
+)
 
 func TransformAstToTemplateData(node *ast.File) templateData {
 	structs, structNames := collectStructs(node)
@@ -42,6 +45,7 @@ func collectStructs(node *ast.File) (map[string][]field, []string) {
 							TypeElement: typeElement,
 							IsStruct:    isStruct,
 							IsPointer:   isPointer,
+							NeedsMergo:  isExternalType(fieldType),
 						})
 					}
 				}
@@ -59,6 +63,11 @@ func getTypeName(expr ast.Expr) (string, string, bool, bool) {
 	case *ast.Ident:
 		return x.Name, x.Name, !isBasicType(x.Name), false
 	case *ast.SelectorExpr:
+		// Fully qualified name for external types
+		pkgIdent, ok := x.X.(*ast.Ident)
+		if ok {
+			return pkgIdent.Name + "." + x.Sel.Name, x.Sel.Name, false, false
+		}
 		typeName, _, isStruct, isPointer := getTypeName(x.X)
 		return typeName + "." + x.Sel.Name, x.Sel.Name, isStruct, isPointer // Preserve struct and pointer flags
 	case *ast.StarExpr:
@@ -79,4 +88,9 @@ func isBasicType(name string) bool {
 	default:
 		return false
 	}
+}
+
+func isExternalType(typeName string) bool {
+	// Simple check if type is considered external or complex enough for mergo
+	return strings.Contains(typeName, ".")
 }

@@ -19,11 +19,15 @@ var (
 
 const funcTemplate = `package {{ .PackageName }}
 
+import (
+    "github.com/imdario/mergo"
+)
+
 // generated code, do not modify
 
 {{ range .Structs }}
 // Merge{{ .TypeName }} merges two {{ .TypeName }} structs.
-func Merge{{ .TypeName }}(dst, src *{{ .TypeName }}) {
+func Merge{{ .TypeName }}(dst, src *{{ .TypeName }}) error {
 {{- range .Fields }}
     {{- if .IsStruct }}
         {{- if .IsPointer }}
@@ -31,17 +35,28 @@ func Merge{{ .TypeName }}(dst, src *{{ .TypeName }}) {
 				if dst.{{ .Name }} == nil {
 					dst.{{ .Name }} = new({{ .TypeElement }})
 				}
-				Merge{{ .TypeElement }}(dst.{{ .Name }}, src.{{ .Name }})
+				if err := Merge{{ .TypeElement }}(dst.{{ .Name }}, src.{{ .Name }}); err != nil {
+					return err
+				}
 			}
         {{- else }}
-    		Merge{{ .TypeElement }}(&dst.{{ .Name }}, &src.{{ .Name }})
+			if err := Merge{{ .TypeElement }}(&dst.{{ .Name }}, &src.{{ .Name }}); err != nil {
+				return err
+			}
         {{- end }}
     {{- else }}
-		if src.{{ .Name }} != {{ defaultZeroValue .Type }} {
-			dst.{{ .Name }} = src.{{ .Name }}
-		}
+        {{- if .NeedsMergo }}
+            if err := mergo.Merge(&dst.{{ .Name }}, src.{{ .Name }}, mergo.WithOverride); err != nil {
+				return err
+			}
+        {{- else }}
+		    if src.{{ .Name }} != {{ defaultZeroValue .Type }} {
+			    dst.{{ .Name }} = src.{{ .Name }}
+		    }
+        {{- end }}
     {{- end }}
 {{- end }}
+    return nil
 }
 {{ end }}
 `
@@ -52,6 +67,7 @@ type field struct {
 	TypeElement string
 	IsStruct    bool
 	IsPointer   bool
+	NeedsMergo  bool
 }
 
 type templateData struct {

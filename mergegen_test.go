@@ -38,6 +38,7 @@ func TestTransformAstToTemplateData(t *testing.T) {
 			Features *Features
 			Client   Client
 			values   []int
+			CreatedAt time.Time
 		}
 	`
 
@@ -58,6 +59,8 @@ func TestTransformAstToTemplateData(t *testing.T) {
 			assert.True(t, structData.Fields[3].IsStruct, "Client should be a struct")
 			assert.False(t, structData.Fields[4].IsPointer, "values should not be a pointer")
 			assert.False(t, structData.Fields[4].IsStruct, "values should not be a struct")
+			assert.True(t, structData.Fields[5].IsStruct, "CreatedAt should be a struct")
+
 		}
 	}
 }
