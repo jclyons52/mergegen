@@ -9,7 +9,7 @@ func TransformAstToTemplateData(node *ast.File) templateData {
 	structs, structNames, imports := collectStructs(node)
 	data := templateData{
 		PackageName: node.Name.Name,
-		Imports:     imports,
+		Imports:     deduplicate(imports),
 	}
 
 	for _, name := range structNames {
@@ -57,6 +57,20 @@ func collectStructs(node *ast.File) (map[string][]field, []string, []string) {
 	})
 
 	return structs, structNames, imports
+}
+
+func deduplicate(imports []string) []string {
+	seen := make(map[string]struct{}, len(imports))
+	j := 0
+	for _, v := range imports {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		imports[j] = v
+		j++
+	}
+	return imports[:j]
 }
 
 func getTypeName(expr ast.Expr) (string, string, bool, bool, string) {
