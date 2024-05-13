@@ -23,8 +23,8 @@ const funcTemplate = `package {{ .PackageName }}
 import (
 {{- range .Imports }}
     "{{ . }}"
-)
 {{- end }}
+)
 {{- end }}
 
 // generated code, do not modify
@@ -38,7 +38,7 @@ type Merger struct {
 // NewMerger creates a new Merger with optional custom merge functions for external types.
 func NewMerger(
 	{{- range externalTypes .Structs }}
-	merge{{ .Name }} func(dst, src *{{ .Type }}) error
+	merge{{ .Name }} func(dst, src *{{ .Type }}) error,
 	{{- end }}
 ) *Merger {
     return &Merger{
